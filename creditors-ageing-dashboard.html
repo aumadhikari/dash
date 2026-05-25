@@ -1,0 +1,1946 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>Creditors Ageing Dashboard</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/papaparse@5.4.1/papaparse.min.js"></script>
+<style>
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{font-family:'Segoe UI',system-ui,-apple-system,sans-serif;background:#f0f2f5;color:#1a1a2e;display:flex;min-height:100vh;font-size:13px}
+  :root{--navy:#0d1b3e;--navy2:#162040;--blue-light:#e8eef8;--green:#22c55e;--amber:#f59e0b;--orange:#f97316;--red:#ef4444;--purple:#8b5cf6;--teal:#06b6d4;--gray:#6b7280;--border:#e2e8f0;--text-muted:#64748b}
+
+  /* SIDEBAR */
+  .sidebar{width:60px;min-width:60px;background:var(--navy);display:flex;flex-direction:column;align-items:center;padding:12px 0;position:sticky;top:0;height:100vh;z-index:100}
+  .sidebar-logo{width:36px;height:36px;background:#1e3a6e;border-radius:8px;display:flex;align-items:center;justify-content:center;margin-bottom:24px}
+  .sidebar-logo svg{width:22px;height:22px;fill:#7eb3f7}
+  .nav-item{width:40px;height:40px;border-radius:8px;display:flex;align-items:center;justify-content:center;margin-bottom:4px;cursor:pointer;transition:background 0.2s;color:#7b9cc4}
+  .nav-item:hover{background:#1e3a6e;color:#a8c5e8}
+  .nav-item.active{background:#2563eb;color:#fff}
+  .nav-item svg{width:20px;height:20px}
+  .nav-spacer{flex:1}
+  .nav-bottom{margin-top:auto}
+
+  /* MAIN */
+  .main{flex:1;display:flex;flex-direction:column;overflow-x:hidden;min-width:0}
+
+  /* HEADER */
+  .header{background:#fff;border-bottom:1px solid var(--border);padding:10px 20px;display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px}
+  .header-left h1{font-size:22px;font-weight:700;color:#0d1b3e;letter-spacing:-0.3px;line-height:1.1}
+  .header-left .sub{font-size:12px;color:var(--text-muted);margin-top:2px}
+  .header-filters{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+  .filter-group{display:flex;flex-direction:column;gap:2px}
+  .filter-group label{font-size:10px;font-weight:600;color:#0d1b3e;text-transform:uppercase;letter-spacing:0.4px}
+  .filter-group select{border:1px solid var(--border);border-radius:6px;padding:4px 24px 4px 8px;font-size:12px;color:#1a1a2e;background:#fff url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%236b7280' stroke-width='2'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E") no-repeat right 6px center;-webkit-appearance:none;cursor:pointer;min-width:90px}
+  .refresh-info{text-align:right}
+  .refresh-info .label{font-size:10px;color:var(--text-muted);font-weight:600;text-transform:uppercase;letter-spacing:0.4px}
+  .refresh-info .time{font-size:12px;color:#0d1b3e;font-weight:600}
+  .refresh-btn{background:none;border:1px solid var(--border);border-radius:6px;padding:4px 8px;cursor:pointer;color:var(--text-muted);display:flex;align-items:center;gap:4px;font-size:11px;margin-top:4px;transition:all 0.2s}
+  .refresh-btn:hover{background:#f8fafc;color:#0d1b3e}
+
+  /* CONTENT */
+  .content{padding:14px 16px;display:flex;flex-direction:column;gap:12px;flex:1}
+
+  /* SECTION HEADER */
+  .section-label{display:flex;align-items:center;gap:10px;margin-bottom:8px}
+  .section-label h2{font-size:13px;font-weight:700;color:#0d1b3e;text-transform:uppercase;letter-spacing:0.5px}
+  .section-label span{font-size:11px;color:var(--text-muted)}
+  .exec-badge{background:#0d1b3e;color:#fff;font-size:11px;font-weight:700;padding:3px 10px;border-radius:4px;text-transform:uppercase;letter-spacing:0.5px}
+
+  /* KPI ROW */
+  .kpi-row{display:grid;grid-template-columns:repeat(7,1fr);gap:8px}
+  .kpi-card{background:#fff;border:1px solid var(--border);border-radius:10px;padding:10px 12px;display:flex;flex-direction:column;gap:4px;transition:transform 0.15s,box-shadow 0.15s;cursor:default}
+  .kpi-card:hover{transform:translateY(-2px);box-shadow:0 4px 16px rgba(0,0,0,0.08)}
+  .kpi-label{font-size:9px;font-weight:700;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.5px}
+  .kpi-top{display:flex;align-items:center;gap:6px;margin:4px 0 2px}
+  .kpi-icon{width:28px;height:28px;border-radius:6px;display:flex;align-items:center;justify-content:center;flex-shrink:0}
+  .kpi-icon svg{width:16px;height:16px}
+  .kpi-value{font-size:22px;font-weight:700;line-height:1}
+  .kpi-sub{font-size:10px;color:var(--text-muted)}
+  .kpi-blue .kpi-icon{background:#dbeafe} .kpi-blue .kpi-icon svg{color:#2563eb} .kpi-blue .kpi-value{color:#1e3a8a}
+  .kpi-red .kpi-icon{background:#fee2e2} .kpi-red .kpi-icon svg{color:#ef4444} .kpi-red .kpi-value{color:#991b1b}
+  .kpi-purple .kpi-icon{background:#ede9fe} .kpi-purple .kpi-icon svg{color:#7c3aed} .kpi-purple .kpi-value{color:#5b21b6}
+  .kpi-green .kpi-icon{background:#dcfce7} .kpi-green .kpi-icon svg{color:#16a34a} .kpi-green .kpi-value{color:#14532d}
+  .kpi-amber .kpi-icon{background:#fef3c7} .kpi-amber .kpi-icon svg{color:#d97706} .kpi-amber .kpi-value{color:#92400e}
+  .kpi-teal .kpi-icon{background:#cffafe} .kpi-teal .kpi-icon svg{color:#0891b2} .kpi-teal .kpi-value{color:#164e63}
+  .kpi-orange .kpi-icon{background:#ffedd5} .kpi-orange .kpi-icon svg{color:#ea580c} .kpi-orange .kpi-value{color:#9a3412}
+
+  /* MIDDLE ROW: AGEING PROFILE + ALERTS */
+  .middle-row{display:grid;grid-template-columns:1fr auto;gap:12px;align-items:stretch}
+  .ageing-profile-card{background:#fff;border:1px solid var(--border);border-radius:10px;padding:14px 16px;min-width:0}
+  .ageing-profile-card h3{font-size:11px;font-weight:700;color:#0d1b3e;text-transform:uppercase;letter-spacing:0.4px;margin-bottom:10px}
+  .stacked-bar{display:flex;border-radius:6px;overflow:hidden;height:40px}
+  .bar-seg{display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:700;color:#fff;white-space:nowrap;transition:opacity 0.2s}
+  .bar-seg:hover{opacity:0.85}
+  .bar-seg.green{background:#22c55e}
+  .bar-seg.amber{background:#f59e0b}
+  .bar-seg.orange{background:#f97316}
+  .bar-seg.red{background:#ef4444}
+  .bar-seg.purple{background:#8b5cf6}
+  .bar-legend{display:flex;gap:14px;margin-top:10px;flex-wrap:wrap}
+  .legend-item{display:flex;align-items:center;gap:5px;font-size:11px;color:var(--text-muted)}
+  .legend-dot{width:10px;height:10px;border-radius:2px;flex-shrink:0}
+
+  /* ALERTS */
+  .alerts-col{display:flex;flex-direction:column;gap:8px;min-width:560px}
+  .alert-card{background:#fff;border:1px solid var(--border);border-radius:10px;padding:12px 14px;flex:1;display:flex;gap:10px;align-items:flex-start}
+  .alert-icon{width:32px;height:32px;border-radius:8px;display:flex;align-items:center;justify-content:center;flex-shrink:0}
+  .alert-icon svg{width:18px;height:18px}
+  .alert-red .alert-icon{background:#fee2e2;color:#ef4444;border-left:3px solid #ef4444}
+  .alert-amber .alert-icon{background:#fef3c7;color:#d97706;border-left:3px solid #f59e0b}
+  .alert-blue .alert-icon{background:#dbeafe;color:#2563eb;border-left:3px solid #2563eb}
+  .alert-card{border-left:3px solid transparent}
+  .alert-red{border-left-color:#ef4444}
+  .alert-amber{border-left-color:#f59e0b}
+  .alert-blue-card{border-left-color:#2563eb}
+  .alert-title{font-size:11px;font-weight:700;color:#0d1b3e;text-transform:uppercase;letter-spacing:0.4px;margin-bottom:3px}
+  .alert-text{font-size:11px;color:#374151;line-height:1.4}
+
+  /* ANALYSIS ROW */
+  .analysis-row{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+  .analysis-card{background:#fff;border:1px solid var(--border);border-radius:10px;padding:14px 16px}
+  .analysis-card h3{font-size:12px;font-weight:700;color:#0d1b3e;text-transform:uppercase;letter-spacing:0.4px;margin-bottom:4px}
+  .analysis-card .sub{font-size:10px;color:var(--text-muted);margin-bottom:10px}
+  .chart-inner{font-size:10px;font-weight:600;color:#0d1b3e;margin-bottom:8px;text-transform:uppercase;letter-spacing:0.3px}
+
+  /* VENDOR ROW */
+  .vendor-row{display:grid;grid-template-columns:1fr auto;gap:12px}
+  .vendor-card{background:#fff;border:1px solid var(--border);border-radius:10px;padding:14px 16px;min-width:0}
+  .vendor-card h3{font-size:12px;font-weight:700;color:#0d1b3e;text-transform:uppercase;letter-spacing:0.4px;margin-bottom:12px}
+  .vendor-list{display:flex;flex-direction:column;gap:7px}
+  .vendor-row-item{display:flex;align-items:center;gap:10px}
+  .vendor-name{width:130px;font-size:12px;color:#1e293b;flex-shrink:0;font-weight:500}
+  .vendor-bar-wrap{flex:1;height:14px;background:#f1f5f9;border-radius:3px;overflow:hidden}
+  .vendor-bar{height:100%;border-radius:3px;transition:width 0.5s}
+  .vendor-amount{width:40px;font-size:12px;font-weight:600;color:#0d1b3e;text-align:right;flex-shrink:0}
+  .bucket-tag{padding:1px 6px;border-radius:3px;font-size:10px;font-weight:700;flex-shrink:0;width:52px;text-align:center}
+  .bucket-tag.red{background:#fee2e2;color:#991b1b}
+  .bucket-tag.blue{background:#dbeafe;color:#1e40af}
+  .bucket-tag.amber{background:#fef3c7;color:#92400e}
+  .bucket-tag.purple{background:#ede9fe;color:#5b21b6}
+  .bucket-tag.green{background:#dcfce7;color:#14532d}
+
+  /* VENDOR CONCENTRATION PANEL */
+  .conc-panel{background:#fff;border:1px solid var(--border);border-radius:10px;padding:14px 16px;min-width:240px;max-width:260px}
+  .conc-panel h3{font-size:11px;font-weight:700;color:#0d1b3e;text-transform:uppercase;letter-spacing:0.4px;margin-bottom:8px}
+  .conc-label{font-size:11px;color:var(--text-muted);margin-bottom:2px}
+  .conc-value{font-size:26px;font-weight:700;color:#0d1b3e;line-height:1.1}
+  .conc-pct{font-size:12px;font-weight:600;color:#ef4444;margin-top:2px;margin-bottom:8px}
+  .progress-bar{height:6px;background:#f1f5f9;border-radius:3px;overflow:hidden;margin-bottom:14px}
+  .progress-fill{height:100%;background:#ef4444;border-radius:3px}
+  .divider{border-top:1px solid var(--border);margin:10px 0}
+  .conc-section-label{font-size:10px;font-weight:700;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.5px;margin-bottom:4px}
+  .conc-section-value{font-size:18px;font-weight:700;color:#16a34a}
+  .conc-section-sub{font-size:10px;color:#16a34a;font-style:italic;margin-bottom:10px}
+  .priority-item{font-size:11px;color:#374151;padding:2px 0}
+
+  /* TABLE */
+  .table-card{background:#fff;border:1px solid var(--border);border-radius:10px;padding:14px 16px;overflow:hidden}
+  .table-header-row{display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;flex-wrap:wrap;gap:8px}
+  .table-search{border:1px solid var(--border);border-radius:6px;padding:5px 10px;font-size:12px;width:200px;outline:none}
+  .table-search:focus{border-color:#2563eb}
+  .export-btn{background:#0d1b3e;color:#fff;border:none;border-radius:6px;padding:5px 12px;font-size:12px;cursor:pointer;display:flex;align-items:center;gap:5px;font-weight:600}
+  .export-btn:hover{background:#1e3a8a}
+  .table-wrap{overflow-x:auto}
+  table{width:100%;border-collapse:collapse;font-size:12px}
+  th{background:#0d1b3e;color:#fff;padding:8px 10px;text-align:left;font-size:10px;font-weight:600;text-transform:uppercase;letter-spacing:0.4px;white-space:nowrap;position:sticky;top:0;cursor:pointer;user-select:none}
+  th:hover{background:#1e3a8a}
+  td{padding:8px 10px;border-bottom:1px solid #f1f5f9;color:#1e293b;white-space:nowrap}
+  tr:hover td{background:#f8fafc}
+  .grand-total td{font-weight:700;color:#0d1b3e;background:#f8fafc;border-top:2px solid var(--border)}
+  .risk-badge{padding:2px 7px;border-radius:4px;font-size:10px;font-weight:700;display:inline-block}
+  .risk-critical{background:#fee2e2;color:#991b1b}
+  .risk-watch{background:#ffedd5;color:#9a3412}
+  .risk-monitor{background:#dbeafe;color:#1e40af}
+  .risk-current{background:#dcfce7;color:#14532d}
+  .highlight-red{color:#ef4444;font-weight:600}
+  .highlight-amber{color:#d97706;font-weight:600}
+  .highlight-blue{color:#2563eb;font-weight:600}
+  .dash{color:#9ca3af}
+
+  /* FOOTER */
+  .footer{background:#fff;border-top:1px solid var(--border);padding:10px 20px;display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px}
+  .risk-legend{display:flex;align-items:center;gap:12px;flex-wrap:wrap}
+  .risk-legend-label{font-size:10px;font-weight:700;color:#0d1b3e;text-transform:uppercase;letter-spacing:0.4px}
+  .risk-legend-item{display:flex;align-items:center;gap:4px;font-size:11px;color:var(--text-muted)}
+  .footer-note{font-size:11px;color:var(--text-muted);font-style:italic}
+
+  .chart-container{position:relative}
+
+  /* SPA VIEW PANELS & UPLOADER CSS */
+  .view-panel { width: 100%; display: flex; flex-direction: column; min-height: 100%; }
+  
+  .import-container{background:#fff;border:1px solid var(--border);border-radius:10.5px;padding:22px;display:flex;flex-direction:column;gap:18px;flex:1}
+  .import-header{border-bottom:1px solid var(--border);padding-bottom:14px;margin-bottom:6px}
+  .import-header h2{font-size:17px;font-weight:700;color:#0d1b3e;text-transform:uppercase;letter-spacing:0.5px}
+  .import-header p{font-size:11.5px;color:var(--text-muted);margin-top:4px;line-height:1.4}
+  
+  .upload-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:14px}
+  @media(max-width:1300px){.upload-grid{grid-template-columns:repeat(2,1fr)}}
+  @media(max-width:650px){.upload-grid{grid-template-columns:1fr}}
+  
+  .upload-card{border:2px dashed var(--border);border-radius:8.5px;padding:18px;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;cursor:pointer;transition:all 0.22s ease-in-out;background:#fafbfc;position:relative;min-height:135px}
+  .upload-card:hover, .upload-card.dragover{border-color:#2563eb;background:#f5f8ff;box-shadow:0 0 0 4px rgba(37,99,235,0.08);transform:translateY(-1px)}
+  .upload-card.loaded{border-style:solid;border-color:#22c55e;background:#f2fdf5}
+  
+  .upload-icon{width:36px;height:36px;border-radius:50%;background:#e2e8f0;display:flex;align-items:center;justify-content:center;margin-bottom:10px;color:#64748b;transition:all 0.2s}
+  .upload-card:hover .upload-icon, .upload-card.dragover .upload-icon{background:#dbeafe;color:#2563eb}
+  .upload-card.loaded .upload-icon{background:#dcfce7;color:#16a34a}
+  .upload-icon svg{width:18px;height:18px}
+  
+  .upload-title{font-size:11.5px;font-weight:700;color:#0d1b3e;text-transform:uppercase;letter-spacing:0.4px;margin-bottom:5px}
+  .upload-desc{font-size:10px;color:var(--text-muted);margin-bottom:10px;line-height:1.3;padding:0 4px}
+  
+  .file-status{font-size:10px;font-weight:700;padding:3px 9px;border-radius:12px;background:#e2e8f0;color:#475569;display:inline-block;max-width:92%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .upload-card.loaded .file-status{background:#dcfce7;color:#15803d}
+  .upload-card input[type="file"]{position:absolute;top:0;left:0;width:100%;height:100%;opacity:0;cursor:pointer}
+  
+  .import-actions{display:flex;align-items:center;justify-content:flex-end;gap:14px;margin-top:16px;border-top:1px solid var(--border);padding-top:18px}
+  .btn-primary{background:#2563eb;color:#fff;border:none;border-radius:6px;padding:8px 22px;font-size:12px;font-weight:700;cursor:pointer;display:flex;align-items:center;gap:6px;transition:background 0.2s,transform 0.15s;text-transform:uppercase;letter-spacing:0.5px}
+  .btn-primary:hover{background:#1d4ed8;transform:translateY(-1px)}
+  .btn-primary:active{transform:translateY(0)}
+  .btn-secondary{background:none;border:1px solid var(--border);color:var(--text-muted);border-radius:6px;padding:8px 18px;font-size:12px;font-weight:600;cursor:pointer;transition:all 0.2s}
+  .btn-secondary:hover{background:#f8fafc;color:#0d1b3e}
+
+  @media(max-width:1200px){
+    .kpi-row{grid-template-columns:repeat(4,1fr)}
+    .middle-row{grid-template-columns:1fr}
+    .alerts-col{min-width:unset;flex-direction:row}
+    .analysis-row{grid-template-columns:1fr}
+    .vendor-row{grid-template-columns:1fr}
+    .conc-panel{max-width:unset;min-width:unset}
+  }
+  @media(max-width:768px){
+    .sidebar{display:none}
+    .kpi-row{grid-template-columns:repeat(2,1fr)}
+    .alerts-col{flex-direction:column}
+    .header-filters{display:none}
+  }
+</style>
+</head>
+<body>
+
+<!-- SIDEBAR (Simplified to keep logo, Dashboard home, and Data Import tabs) -->
+<nav class="sidebar" role="navigation" aria-label="Main navigation">
+  <div class="sidebar-logo" title="Creditors Dashboard" style="cursor:pointer" onclick="switchView('dashboard')">
+    <svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path d="M3 21V9l9-6 9 6v12H3zm2-2h14V10l-7-4.67L5 10v9zm3-4h8v2H8v-2zm0-3h8v2H8v-2z"/></svg>
+  </div>
+  <div class="nav-item" id="navImport" title="Data Import" onclick="switchView('import')">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
+      <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+      <polyline points="7 10 12 15 17 10"/>
+      <line x1="12" y1="15" x2="12" y2="3"/>
+    </svg>
+  </div>
+</nav>
+
+<!-- MAIN -->
+<div class="main">
+
+  <!-- DASHBOARD VIEW PANEL -->
+  <div id="dashboardView" class="view-panel">
+    <!-- HEADER -->
+    <header class="header">
+      <div class="header-left">
+        <h1>CREDITORS AGEING DASHBOARD</h1>
+        <div class="sub">Business Unit: IUG &nbsp;|&nbsp; Period: 2026/002 &nbsp;|&nbsp; Ageing Date: As at Report Date</div>
+      </div>
+      <div class="header-filters">
+        <div class="filter-group">
+          <label>Business Unit</label>
+          <select id="buFilter" onchange="applyFilters()"><option value="All">All</option><option value="IUG">IUG</option></select>
+        </div>
+        <div class="filter-group">
+          <label>Category</label>
+          <select id="catFilter" onchange="applyFilters()"><option value="All">All</option><option value="Vendor">Vendor</option></select>
+        </div>
+        <div class="filter-group">
+          <label>Period</label>
+          <select id="periodFilter" onchange="applyFilters()"><option value="All">All</option><option value="2026/002">2026/002</option><option value="2026/001">2026/001</option></select>
+        </div>
+        <div class="filter-group">
+          <label>Ageing Bucket</label>
+          <select id="bucketFilter" onchange="applyFilters()"><option value="All">All</option><option value="0–30 D">0–30 D</option><option value="31–90 D">31–90 D</option><option value="91–180 D">91–180 D</option><option value="181–365 D">181–365 D</option><option value=">365 D">&gt;365 D</option></select>
+        </div>
+        <div class="filter-group">
+          <label>Account Code</label>
+          <select id="acctFilter" onchange="applyFilters()"><option value="All">All</option></select>
+        </div>
+      </div>
+      <div class="refresh-info">
+        <div class="label">Last Refresh</div>
+        <div class="time" id="refreshTime">24 May 2025 10:30 AM</div>
+        <button class="refresh-btn" onclick="initializeDashboard()">
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 12a9 9 0 109-9"/><path d="M3 3v6h6"/></svg>
+          Refresh
+        </button>
+      </div>
+    </header>
+
+    <!-- CONTENT -->
+    <div class="content">
+      <!-- EXECUTIVE SUMMARY -->
+      <div>
+        <div class="section-label">
+          <span class="exec-badge">Executive Summary</span>
+          <span>Top-row KPIs – Primary liability signals for C-suite review</span>
+        </div>
+        <div class="kpi-row">
+          <div class="kpi-card kpi-blue">
+            <div class="kpi-label">Total Outstanding</div>
+            <div class="kpi-top">
+              <div class="kpi-icon"><svg viewBox="0 0 24 24" fill="none" stroke="#2563eb" stroke-width="1.8"><rect x="2" y="6" width="20" height="14" rx="2"/><path d="M2 10h20M6 16h2M10 16h6"/></svg></div>
+              <div class="kpi-value" id="kpiTotalOutstanding">₹49.2L</div>
+            </div>
+            <div class="kpi-sub" id="kpiTotalOutstandingSub">All Categories</div>
+          </div>
+          <div class="kpi-card kpi-red">
+            <div class="kpi-label">Overdue &gt; 90 Days</div>
+            <div class="kpi-top">
+              <div class="kpi-icon"><svg viewBox="0 0 24 24" fill="none" stroke="#ef4444" stroke-width="1.8"><path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg></div>
+              <div class="kpi-value" id="kpiOverdue90">₹11.2L</div>
+            </div>
+            <div class="kpi-sub" id="kpiOverdue90Sub">22.8% of Total</div>
+          </div>
+          <div class="kpi-card kpi-purple">
+            <div class="kpi-label">Vendor Payables</div>
+            <div class="kpi-top">
+              <div class="kpi-icon"><svg viewBox="0 0 24 24" fill="none" stroke="#7c3aed" stroke-width="1.8"><path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 00-3-3.87M16 3.13a4 4 0 010 7.75"/></svg></div>
+              <div class="kpi-value" id="kpiVendorPayables">₹49.2L</div>
+            </div>
+            <div class="kpi-sub" id="kpiVendorPayablesSub">52 Vendors · IUG</div>
+          </div>
+          <div class="kpi-card kpi-green">
+            <div class="kpi-label">Current (0–30 D)</div>
+            <div class="kpi-top">
+              <div class="kpi-icon"><svg viewBox="0 0 24 24" fill="none" stroke="#16a34a" stroke-width="1.8"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 3"/></svg></div>
+              <div class="kpi-value" id="kpiCurrent">₹15.7L</div>
+            </div>
+            <div class="kpi-sub" id="kpiCurrentSub">Immediate Cash Needed</div>
+          </div>
+          <div class="kpi-card kpi-amber">
+            <div class="kpi-label">31–90 Days</div>
+            <div class="kpi-top">
+              <div class="kpi-icon"><svg viewBox="0 0 24 24" fill="none" stroke="#d97706" stroke-width="1.8"><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/></svg></div>
+              <div class="kpi-value" id="kpi31_90">₹22.3L</div>
+            </div>
+            <div class="kpi-sub" id="kpi31_90Sub">45.4% Concentration</div>
+          </div>
+          <div class="kpi-card kpi-teal">
+            <div class="kpi-label">Avg Ageing Days</div>
+            <div class="kpi-top">
+              <div class="kpi-icon"><svg viewBox="0 0 24 24" fill="none" stroke="#0891b2" stroke-width="1.8"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 3"/></svg></div>
+              <div class="kpi-value" id="kpiAvgAgeing">62</div>
+            </div>
+            <div class="kpi-sub" id="kpiAvgAgeingSub">Weighted Average</div>
+          </div>
+          <div class="kpi-card kpi-orange">
+            <div class="kpi-label">Chronic (&gt;180 D) Exposure</div>
+            <div class="kpi-top">
+              <div class="kpi-icon"><svg viewBox="0 0 24 24" fill="none" stroke="#ea580c" stroke-width="1.8"><path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg></div>
+              <div class="kpi-value" id="kpiChronic">₹9.8L</div>
+            </div>
+            <div class="kpi-sub" id="kpiChronicSub">20% of Total</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- MIDDLE ROW: AGEING PROFILE + ALERTS -->
+      <div class="middle-row">
+        <div class="ageing-profile-card">
+          <h3>Ageing Profile — Total Outstanding by Bucket</h3>
+          <div class="stacked-bar" id="stackedBar">
+            <div class="bar-seg green" style="flex:32" title="0–30 D: ₹15.7L (32%)">₹15.7L (32%)</div>
+            <div class="bar-seg amber" style="flex:45" title="31–90 D: ₹22.3L (45%)">₹22.3L (45%)</div>
+            <div class="bar-seg orange" style="flex:3" title="91–180 D: ₹1.4L (3%)">3%</div>
+            <div class="bar-seg red" style="flex:16" title="181–365 D: ₹7.7L (16%)">₹7.7L (16%)</div>
+            <div class="bar-seg purple" style="flex:4" title=">365 D: ₹2.1L (4%)">4%</div>
+          </div>
+          <div class="bar-legend" id="barLegend">
+            <div class="legend-item"><div class="legend-dot" style="background:#22c55e"></div>0–30 D</div>
+            <div class="legend-item"><div class="legend-dot" style="background:#f59e0b"></div>31–90 D</div>
+            <div class="legend-item"><div class="legend-dot" style="background:#f97316"></div>91–180 D</div>
+            <div class="legend-item"><div class="legend-dot" style="background:#ef4444"></div>181–365 D</div>
+            <div class="legend-item"><div class="legend-dot" style="background:#8b5cf6"></div>&gt;365 D</div>
+          </div>
+        </div>
+        <div class="alerts-col" id="alertsCol">
+          <div class="alert-card alert-red">
+            <div class="alert-icon" style="background:#fee2e2">
+              <svg viewBox="0 0 24 24" fill="none" stroke="#ef4444" stroke-width="2"><path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+            </div>
+            <div>
+              <div class="alert-title">⚠ CFO Alert</div>
+              <div class="alert-text">₹7.7L aged 181–365 days — Escalation Risk</div>
+            </div>
+          </div>
+          <div class="alert-card alert-amber">
+            <div class="alert-icon" style="background:#fef3c7">
+              <svg viewBox="0 0 24 24" fill="none" stroke="#d97706" stroke-width="2"><path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+            </div>
+            <div>
+              <div class="alert-title">⚠ Watch List</div>
+              <div class="alert-text">Red Eye Media + Raviratan Motors = ₹15.3L in 31–90 D</div>
+            </div>
+          </div>
+          <div class="alert-card alert-blue-card">
+            <div class="alert-icon" style="background:#dbeafe">
+              <svg viewBox="0 0 24 24" fill="none" stroke="#2563eb" stroke-width="2"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 3"/></svg>
+            </div>
+            <div>
+              <div class="alert-title" style="color:#1e40af">⊙ Control Offset</div>
+              <div class="alert-text">Control A/c shows ₹2.4L debit balance – Reconcile Urgently</div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- AGEING ANALYSIS + VENDOR ANALYSIS -->
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
+
+        <!-- AGEING ANALYSIS -->
+        <div class="analysis-card">
+          <div style="display:flex;align-items:baseline;gap:10px;margin-bottom:2px">
+            <h3 style="font-size:12px;font-weight:700;color:#0d1b3e;text-transform:uppercase;letter-spacing:0.4px">Ageing Analysis</h3>
+            <span style="font-size:10px;color:var(--text-muted)">Bucket breakdown – Trend &amp; risk graduation</span>
+          </div>
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-top:8px">
+            <div>
+              <div style="font-size:10px;font-weight:700;color:#0d1b3e;text-transform:uppercase;letter-spacing:0.3px;margin-bottom:8px">Ageing Bucket – Outstanding by Days Band</div>
+              <div class="chart-container" style="height:200px;position:relative">
+                <canvas id="barChart" role="img" aria-label="Bar chart showing outstanding amounts by ageing bucket">Outstanding by bucket</canvas>
+              </div>
+            </div>
+            <div>
+              <div style="font-size:10px;font-weight:700;color:#0d1b3e;text-transform:uppercase;letter-spacing:0.3px;margin-bottom:8px">Total Outstanding by Bucket</div>
+              <div style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:6px">
+                <span style="display:flex;align-items:center;gap:3px;font-size:10px;color:var(--text-muted)"><span style="width:8px;height:8px;border-radius:2px;background:#22c55e;display:inline-block"></span>0–30 D</span>
+                <span style="display:flex;align-items:center;gap:3px;font-size:10px;color:var(--text-muted)"><span style="width:8px;height:8px;border-radius:2px;background:#f59e0b;display:inline-block"></span>31–90 D</span>
+                <span style="display:flex;align-items:center;gap:3px;font-size:10px;color:var(--text-muted)"><span style="width:8px;height:8px;border-radius:2px;background:#f97316;display:inline-block"></span>91–180 D</span>
+                <span style="display:flex;align-items:center;gap:3px;font-size:10px;color:var(--text-muted)"><span style="width:8px;height:8px;border-radius:2px;background:#ef4444;display:inline-block"></span>181–365 D</span>
+                <span style="display:flex;align-items:center;gap:3px;font-size:10px;color:var(--text-muted)"><span style="width:8px;height:8px;border-radius:2px;background:#8b5cf6;display:inline-block"></span>&gt;365 D</span>
+              </div>
+              <div class="chart-container" style="height:185px;position:relative">
+                <canvas id="donutChart" role="img" aria-label="Donut chart of total outstanding by ageing bucket">Total outstanding</canvas>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- VENDOR ANALYSIS -->
+        <div style="display:grid;grid-template-columns:1fr auto;gap:12px">
+          <div class="vendor-card">
+            <div style="display:flex;align-items:baseline;gap:10px;margin-bottom:12px">
+              <h3 style="font-size:12px;font-weight:700;color:#0d1b3e;text-transform:uppercase;letter-spacing:0.4px;margin-bottom:0">Vendor Analysis</h3>
+              <span style="font-size:10px;color:var(--text-muted)">Concentration risk – Top payables – Priority settlements</span>
+            </div>
+            <div style="font-size:10px;font-weight:700;color:#0d1b3e;text-transform:uppercase;letter-spacing:0.4px;margin-bottom:8px">Top 8 Vendors by Outstanding</div>
+            <div class="vendor-list" id="vendorList">
+              <!-- rendered by JS -->
+            </div>
+          </div>
+          <div class="conc-panel">
+            <h3>Vendor Concentration</h3>
+            <div class="conc-label">Top 5 Vendors</div>
+            <div class="conc-value" id="concValue">₹33.1L</div>
+            <div class="conc-pct" id="concPct">67% of Total Outstanding</div>
+            <div class="progress-bar"><div class="progress-fill" id="concProgressFill" style="width:67%"></div></div>
+            <div class="divider"></div>
+            <div class="conc-section-label">Credit Balances (Overpaid)</div>
+            <div class="conc-section-value" id="overpaidValue">₹17.7L</div>
+            <div class="conc-section-sub" id="overpaidSub">Nurture Advance (Adjust)</div>
+            <div class="divider"></div>
+            <div class="conc-section-label">Immediate Payment Priority</div>
+            <div style="margin-top:4px;font-size:11px;color:#374151;line-height:1.6" id="immediatePriorities">
+              Raviratan ₹7.1L · Lavanya ₹1.6L ·<br>Jyu Facility ₹0.7L — all 0–30 D
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- DRILLDOWN TABLE -->
+      <div class="table-card">
+        <div class="table-header-row">
+          <div>
+            <div class="section-label" style="margin-bottom:2px">
+              <h2>Detailed Drilldown Table</h2>
+              <span>Full transaction-level view – Sortable – Filterable – Exportable</span>
+            </div>
+          </div>
+          <div style="display:flex;align-items:center;gap:8px">
+            <input class="table-search" type="text" placeholder="Search vendor..." id="tableSearch" oninput="filterTable()"/>
+            <button class="export-btn" onclick="exportCSV()">
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+              Export CSV
+            </button>
+          </div>
+        </div>
+        <div class="table-wrap">
+          <table id="dataTable">
+            <thead>
+              <tr>
+                <th onclick="sortTable(0)">Account Code ↕</th>
+                <th onclick="sortTable(1)">Vendor ↕</th>
+                <th onclick="sortTable(2)">Category ↕</th>
+                <th onclick="sortTable(3)">Business Unit ↕</th>
+                <th onclick="sortTable(4)">Total Outstanding ↕</th>
+                <th onclick="sortTable(5)">0–30 D ↕</th>
+                <th onclick="sortTable(6)">31–90 D ↕</th>
+                <th onclick="sortTable(7)">91–180 D ↕</th>
+                <th onclick="sortTable(8)">181–365 D ↕</th>
+                <th onclick="sortTable(9)">&gt;365 D ↕</th>
+                <th onclick="sortTable(10)">Total Overdue (&gt;30 D) ↕</th>
+                <th onclick="sortTable(11)">Days Past Due (Avg) ↕</th>
+                <th>Risk Flag</th>
+              </tr>
+            </thead>
+            <tbody id="tableBody"></tbody>
+            <tfoot>
+              <tr class="grand-total">
+                <td colspan="4"><strong>Grand Total</strong></td>
+                <td id="totalOutstandingGrand">₹49.2L</td>
+                <td class="highlight-blue" id="d0_30Grand">₹15.7L</td>
+                <td class="highlight-amber" id="d31_90Grand">₹22.3L</td>
+                <td class="highlight-amber" id="d91_180Grand">₹1.4L</td>
+                <td class="highlight-red" id="d181_365Grand">₹7.7L</td>
+                <td class="highlight-red" id="d365pGrand">₹2.1L</td>
+                <td id="totalOverdueGrand">₹33.5L</td>
+                <td id="avgAgeingGrand">62</td>
+                <td></td>
+              </tr>
+            </tfoot>
+          </table>
+        </div>
+      </div>
+    </div><!-- /content -->
+
+    <!-- FOOTER -->
+    <footer class="footer">
+      <div class="risk-legend">
+        <span class="risk-legend-label">Risk Flag Logic:</span>
+        <span class="risk-legend-item"><span class="risk-badge risk-critical">●</span> Critical: &gt;365 D</span>
+        <span class="risk-legend-item"><span class="risk-badge risk-watch">●</span> Watch: 181–365 D</span>
+        <span class="risk-legend-item"><span class="risk-badge risk-monitor">●</span> Monitor: 91–180 D</span>
+        <span class="risk-legend-item"><span class="risk-badge risk-current">●</span> Current: 0–30 D</span>
+      </div>
+      <div class="footer-note">Figures are in INR (Lakhs) &nbsp;|&nbsp; Filters are dynamic &nbsp;|&nbsp; All visuals respond to slicers</div>
+    </footer>
+  </div><!-- /dashboardView -->
+
+  <!-- DATA IMPORT SPA VIEW PANEL -->
+  <div id="importView" class="view-panel" style="display:none" ondragover="event.preventDefault()" ondrop="handleGlobalDrop(event)">
+    <!-- HEADER -->
+    <header class="header">
+      <div class="header-left">
+        <h1>CREDITORS DATA IMPORT</h1>
+        <div class="sub">Excel Sheet Uploader &nbsp;|&nbsp; Drag and drop sheet exports to reconstruct the dashboard in real-time</div>
+      </div>
+      <div class="refresh-info">
+        <button class="refresh-btn" onclick="switchView('dashboard')">
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M19 12H5M12 19l-7-7 7-7"/></svg>
+          Back to Dashboard
+        </button>
+      </div>
+    </header>
+
+    <!-- CONTENT -->
+    <div class="content">
+      <div class="import-container">
+        <div class="import-header">
+          <h2>Dynamic Multi-Sheet Compiler</h2>
+          <p>Drag and drop all 8 Excel-exported CSV files together directly onto this window, or click individual cards to select files. The engine will instantly compile, normalise, and cache your figures.</p>
+        </div>
+        
+        <div class="upload-grid">
+          <!-- Slot 1 -->
+          <div class="upload-card" id="slotCard-1">
+            <div class="upload-icon">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="12" y1="18" x2="12" y2="12"/><polyline points="9 15 12 12 15 15"/></svg>
+            </div>
+            <div class="upload-title">vendor</div>
+            <div class="upload-desc">Detailed creditors/vendors outstanding ledger</div>
+            <span class="file-status" id="fileStatus-1">No File Selected</span>
+            <input type="file" accept=".csv" onchange="handleFileSelect(1, this)"/>
+          </div>
+          
+          <!-- Slot 2 -->
+          <div class="upload-card" id="slotCard-2">
+            <div class="upload-icon">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="12" y1="18" x2="12" y2="12"/><polyline points="9 15 12 12 15 15"/></svg>
+            </div>
+            <div class="upload-title">ageing vendor</div>
+            <div class="upload-desc">Overall creditors/vendors ageing summary</div>
+            <span class="file-status" id="fileStatus-2">No File Selected</span>
+            <input type="file" accept=".csv" onchange="handleFileSelect(2, this)"/>
+          </div>
+          
+          <!-- Slot 3 -->
+          <div class="upload-card" id="slotCard-3">
+            <div class="upload-icon">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="12" y1="18" x2="12" y2="12"/><polyline points="9 15 12 12 15 15"/></svg>
+            </div>
+            <div class="upload-title">control</div>
+            <div class="upload-desc">Detailed control account debit balances</div>
+            <span class="file-status" id="fileStatus-3">No File Selected</span>
+            <input type="file" accept=".csv" onchange="handleFileSelect(3, this)"/>
+          </div>
+          
+          <!-- Slot 4 -->
+          <div class="upload-card" id="slotCard-4">
+            <div class="upload-icon">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="12" y1="18" x2="12" y2="12"/><polyline points="9 15 12 12 15 15"/></svg>
+            </div>
+            <div class="upload-title">control acc</div>
+            <div class="upload-desc">Overall control account summary</div>
+            <span class="file-status" id="fileStatus-4">No File Selected</span>
+            <input type="file" accept=".csv" onchange="handleFileSelect(4, this)"/>
+          </div>
+          
+          <!-- Slot 5 -->
+          <div class="upload-card" id="slotCard-5">
+            <div class="upload-icon">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="12" y1="18" x2="12" y2="12"/><polyline points="9 15 12 12 15 15"/></svg>
+            </div>
+            <div class="upload-title">emp</div>
+            <div class="upload-desc">Detailed employee outstandings/advances</div>
+            <span class="file-status" id="fileStatus-5">No File Selected</span>
+            <input type="file" accept=".csv" onchange="handleFileSelect(5, this)"/>
+          </div>
+          
+          <!-- Slot 6 -->
+          <div class="upload-card" id="slotCard-6">
+            <div class="upload-icon">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="12" y1="18" x2="12" y2="12"/><polyline points="9 15 12 12 15 15"/></svg>
+            </div>
+            <div class="upload-title">aging emp</div>
+            <div class="upload-desc">Overall employee ageing totals summary</div>
+            <span class="file-status" id="fileStatus-6">No File Selected</span>
+            <input type="file" accept=".csv" onchange="handleFileSelect(6, this)"/>
+          </div>
+          
+          <!-- Slot 7 -->
+          <div class="upload-card" id="slotCard-7">
+            <div class="upload-icon">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="12" y1="18" x2="12" y2="12"/><polyline points="9 15 12 12 15 15"/></svg>
+            </div>
+            <div class="upload-title">faculty</div>
+            <div class="upload-desc">Detailed faculty outstanding ageing list</div>
+            <span class="file-status" id="fileStatus-7">No File Selected</span>
+            <input type="file" accept=".csv" onchange="handleFileSelect(7, this)"/>
+          </div>
+          
+          <!-- Slot 8 -->
+          <div class="upload-card" id="slotCard-8">
+            <div class="upload-icon">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="12" y1="18" x2="12" y2="12"/><polyline points="9 15 12 12 15 15"/></svg>
+            </div>
+            <div class="upload-title">aging faculty</div>
+            <div class="upload-desc">Overall faculty ageing totals summary</div>
+            <span class="file-status" id="fileStatus-8">No File Selected</span>
+            <input type="file" accept=".csv" onchange="handleFileSelect(8, this)"/>
+          </div>
+        </div>
+        
+        <div class="import-actions">
+          <button class="btn-secondary" onclick="resetToDemoData()">Reset to Demo Data</button>
+          <button class="btn-primary" onclick="processUploadedFiles()">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><polyline points="12 16 12 12 8 12"/><line x1="12" y1="12" x2="16" y2="12"/></svg>
+            Process &amp; Update Dashboard
+          </button>
+        </div>
+      </div>
+    </div>
+  </div><!-- /importView -->
+
+</div><!-- /main -->
+
+<script>
+// ===== GLOBAL STATE =====
+let dashboardData = {
+  transactions: [],
+  ageing: [],
+  vendors: [],
+  kpis: [],
+  alerts: []
+};
+
+let uploadedFiles = {
+  1: null, 2: null, 3: null, 4: null,
+  5: null, 6: null, 7: null, 8: null
+};
+// User-provided sheet names for auto-mapping (order corresponds to slots 1-8)
+const sheetNames = ['vendor', 'ageing vendor', 'control', 'control acc', 'emp', 'aging emp', 'faculty', 'aging faculty'];
+
+let filteredTransactions = [];
+let barChartInstance = null;
+let donutChartInstance = null;
+let currentSortCol = -1;
+let currentSortAsc = true;
+
+// View toggler — switches between Dashboard and Data Import
+function switchView(viewName) {
+  const dashboardView = document.getElementById('dashboardView');
+  const importView = document.getElementById('importView');
+  const navImport = document.getElementById('navImport');
+
+  if (viewName === 'dashboard') {
+    dashboardView.style.display = 'flex';
+    importView.style.display = 'none';
+    if (navImport) navImport.classList.remove('active');
+  } else if (viewName === 'import') {
+    dashboardView.style.display = 'none';
+    importView.style.display = 'flex';
+    if (navImport) navImport.classList.add('active');
+  }
+}
+
+// ===== LOCALSTORAGE CACHING =====
+function saveDashboardState() {
+  const cacheObj = {
+    uploadedFiles: uploadedFiles,
+    dashboardData: dashboardData
+  };
+  try {
+    localStorage.setItem('creditors_dashboard_data', JSON.stringify(cacheObj));
+    console.log('Saved dynamic state to browser LocalStorage.');
+  } catch (err) {
+    console.warn('LocalStorage caching failed:', err);
+  }
+}
+
+function loadDashboardState() {
+  try {
+    const cached = localStorage.getItem('creditors_dashboard_data');
+    if (cached) {
+      const state = JSON.parse(cached);
+      uploadedFiles = state.uploadedFiles || uploadedFiles;
+      dashboardData = state.dashboardData;
+      
+      // Update slots visuals
+      for (let slot in uploadedFiles) {
+        if (uploadedFiles[slot]) {
+          const card = document.getElementById(`slotCard-${slot}`);
+          if (card) card.classList.add('loaded');
+          const status = document.getElementById(`fileStatus-${slot}`);
+          if (status) status.textContent = uploadedFiles[slot].name;
+        }
+      }
+      
+      console.log('Successfully loaded state from browser LocalStorage.');
+      return true;
+    }
+  } catch (err) {
+    console.warn('LocalStorage read error:', err);
+  }
+  return false;
+}
+
+// Reset uploader and load server CSVs
+async function resetToDemoData() {
+  if (confirm('Are you sure you want to discard your uploaded files and restore the standard demo datasets?')) {
+    localStorage.removeItem('creditors_dashboard_data');
+    
+    // Clear slot visuals
+    for (let i = 1; i <= 8; i++) {
+      uploadedFiles[i] = null;
+      const card = document.getElementById(`slotCard-${i}`);
+      if (card) card.classList.remove('loaded');
+      const statusEl = document.getElementById(`fileStatus-${i}`);
+      if (statusEl) statusEl.textContent = 'No File Selected';
+    }
+    
+    await initializeDashboard(true); // force reload from server CSVs
+    switchView('dashboard');
+  }
+}
+
+// ===== DRAG AND DROP & INPUT FILE HANDLERS =====
+function handleFileSelect(slot, input) {
+  const file = input.files[0];
+  if (!file) return;
+  readAndStoreFile(slot, file);
+}
+
+function readAndStoreFile(slot, file) {
+  if (!file.name.endsWith('.csv')) {
+    alert('Invalid format. Please select a .csv file.');
+    return;
+  }
+  const reader = new FileReader();
+  reader.onload = function(e) {
+    uploadedFiles[slot] = {
+      name: file.name,
+      content: e.target.result
+    };
+    const card = document.getElementById(`slotCard-${slot}`);
+    if (card) card.classList.add('loaded');
+    const statusEl = document.getElementById(`fileStatus-${slot}`);
+    if (statusEl) statusEl.textContent = file.name;
+    console.log(`Slot ${slot} loaded: ${file.name}`);
+  };
+  reader.readAsText(file);
+}
+
+function handleGlobalDrop(e) {
+  e.preventDefault();
+  const files = e.dataTransfer.files;
+  if (files.length === 0) return;
+  
+  let mappedCount = 0;
+  Array.from(files).forEach(file => {
+    if (!file.name.endsWith('.csv')) return;
+    
+    const cleanName = file.name.toLowerCase().replace(/[\s_-]+/g, '');
+    let matchedSlot = null;
+    // Attempt to match against user-provided sheet names
+    sheetNames.forEach((sheet, idx) => {
+      const cleanSheet = sheet.toLowerCase().replace(/[\s_-]+/g, '');
+      if (cleanName.includes(cleanSheet)) {
+        matchedSlot = idx + 1; // slots are 1-indexed
+      }
+    });
+    
+    if (matchedSlot) {
+      readAndStoreFile(matchedSlot, file);
+      mappedCount++;
+    }
+  });
+  
+  if (mappedCount > 0) {
+    console.log(`Auto-mapped ${mappedCount} dropped CSV files to their matching slots.`);
+  }
+}
+
+// ===== 8-CSV PROCESSOR & MERGER ENGINE =====
+function processUploadedFiles() {
+  if (!uploadedFiles[1]) {
+    alert('Please upload at least "vendor" (List 1) to process outstanding creditors data!');
+    return;
+  }
+  
+  // Slot → category and sign treatment mapping
+  // Slots: 1=vendor, 2=ageing vendor, 3=control, 4=control acc, 5=emp, 6=aging emp, 7=faculty, 8=aging faculty
+  // Only detail sheets (1,3,5,7) are used for transaction data
+  const slotConfig = {
+    1: { category: 'Vendor',   invertSign: true  },
+    3: { category: 'Control',  invertSign: false },
+    5: { category: 'Employee', invertSign: true  },
+    7: { category: 'Faculty',  invertSign: true  }
+  };
+  
+  let combinedTransactions = [];
+  
+  for (const [slot, config] of Object.entries(slotConfig)) {
+    if (!uploadedFiles[slot]) continue;
+    
+    // Preprocess to strip metadata rows
+    const cleanText = preprocessCSV(uploadedFiles[slot].content);
+    
+    const parsed = Papa.parse(cleanText, {
+      header: true,
+      dynamicTyping: false,
+      skipEmptyLines: 'greedy'
+    });
+    
+    if (!parsed.data || parsed.data.length === 0) continue;
+    
+    const mapped = parsed.data.map(rawRow => {
+      const n = normalizeRow(rawRow);
+      
+      let code = n.accountcode || n.code || n.analysiscode || '';
+      const vendor = n.vendor || n.description || n.name || 'Unknown';
+      
+      if (!vendor || vendor.toLowerCase().includes('grand total') || vendor.toLowerCase().includes('total')) return null;
+      if (!code && !vendor) return null;
+      
+      // Faculty CSV has no Account Code — generate from description
+      if (!code && config.category === 'Faculty') {
+        code = 'F-' + vendor.substring(0, 8).toUpperCase().replace(/\s/g, '');
+      }
+      if (!code) return null;
+      
+      const bu = n.businessunit || n.bu || 'IUG';
+      
+      const parseIndian = (possibleKeys) => {
+        for (let k of possibleKeys) {
+          if (n[k] !== undefined && n[k] !== null && String(n[k]).trim() !== '') {
+            let val = String(n[k]).replace(/,/g, '').replace(/"/g, '').trim();
+            let p = parseFloat(val);
+            if (!isNaN(p)) return p;
+          }
+        }
+        return 0;
+      };
+      
+      let total = parseIndian(['baseamount', 'sumofbaseamount', 'totaloutstanding', 'total', 'sumofoutstanding']);
+      let d0_30 = parseIndian(['0to30days', 'sumof0to30days', '030d', '030days', 'd030', '030', 'sumof0to30d']);
+      let d31_90 = parseIndian(['31to90days', 'sumof31to90days', '3190d', '3190days', 'd3190', '3190', 'sumof31to90d']);
+      let d91_180 = parseIndian(['91to180days', 'sumof91to180days', '91180d', '91180days', 'd91180', '91180', 'sumof91to180d']);
+      let d181_365 = parseIndian(['181to365days', 'sumof181to365days', '181365d', '181365days', 'd181365', '181365', 'sumof181to365d']);
+      let d365p = parseIndian(['over365days', 'sumofover365days', '365d', 'd365p', '365p', '365', 'sumofover365d']);
+      
+      // Sign inversion for credit-balance exports
+      if (config.invertSign) {
+        total = -total;
+        d0_30 = -d0_30;
+        d31_90 = -d31_90;
+        d91_180 = -d91_180;
+        d181_365 = -d181_365;
+        d365p = -d365p;
+      }
+      
+      const lakhsTotal = toLakhs(total);
+      const lakhsD0_30 = toLakhs(d0_30);
+      const lakhsD31_90 = toLakhs(d31_90);
+      const lakhsD91_180 = toLakhs(d91_180);
+      const lakhsD181_365 = toLakhs(d181_365);
+      const lakhsD365p = toLakhs(d365p);
+      
+      const overdue = lakhsD31_90 + lakhsD91_180 + lakhsD181_365 + lakhsD365p;
+      
+      // Estimate DPD from bucket weights
+      let dpd = 0;
+      const absTotal = Math.abs(lakhsTotal);
+      if (absTotal > 0) {
+        dpd = Math.round(
+          (Math.abs(lakhsD0_30) * 15 +
+           Math.abs(lakhsD31_90) * 60 +
+           Math.abs(lakhsD91_180) * 135 +
+           Math.abs(lakhsD181_365) * 270 +
+           Math.abs(lakhsD365p) * 420) / absTotal
+        );
+      }
+      
+      let risk = '';
+      if (lakhsD365p > 0) risk = 'Critical';
+      else if (lakhsD181_365 > 0) risk = 'Watch';
+      else if (lakhsD91_180 > 0) risk = 'Monitor';
+      else risk = 'Current';
+      
+      return {
+        code,
+        vendor,
+        category: config.category,
+        bu,
+        total: lakhsTotal,
+        d0_30: lakhsD0_30 || null,
+        d31_90: lakhsD31_90 || null,
+        d91_180: lakhsD91_180 || null,
+        d181_365: lakhsD181_365 || null,
+        d365p: lakhsD365p || null,
+        overdue: overdue || null,
+        dpd,
+        risk
+      };
+    }).filter(Boolean);
+    
+    combinedTransactions = combinedTransactions.concat(mapped);
+    console.log(`Slot ${slot}: Loaded ${mapped.length} rows (${config.category})`);
+  }
+  
+  // Dynamic Alerts Engine
+  const dynamicAlerts = generateDynamicAlerts(combinedTransactions);
+  
+  // Update State
+  dashboardData.transactions = combinedTransactions;
+  dashboardData.alerts = dynamicAlerts;
+  
+  console.log('Compiled and merged new user data suite:', dashboardData);
+  
+  // Re-populate dropdown slices
+  populateFilterOptions();
+  
+  // Apply Master Filters and Draw Charts
+  applyFilters();
+  
+  // Update dynamic refresh timestamp
+  const now = new Date();
+  const formattedDate = now.toLocaleDateString('en-US', { day: 'numeric', month: 'short', year: 'numeric' }) + ' ' + 
+                        now.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: true });
+  document.getElementById('refreshTime').textContent = formattedDate;
+  
+  // Persist into LocalStorage
+  saveDashboardState();
+  
+  // Switch back to Dashboard view
+  switchView('dashboard');
+  
+  alert('Dashboard successfully updated with your uploaded sheet data!');
+}
+
+// Generate smart real-time alerts from compiled transaction ledger
+function generateDynamicAlerts(transactionsList) {
+  const alerts = [];
+  
+  // 1. CFO Alert: >180 Days ageing exposure
+  const chronicSum = transactionsList.reduce((acc, t) => acc + (t.d181_365 || 0) + (t.d365p || 0), 0);
+  if (chronicSum > 0) {
+    alerts.push({
+      alert_type: 'CFO Alert',
+      title: '⚠ CFO Alert',
+      message: `${formatLakhs(chronicSum)} aged >180 days — Escalation Risk`,
+      severity: 'critical'
+    });
+  }
+  
+  // 2. Watch List: Top 2 outstanding in 31-90 D bucket
+  const vendorD31_90 = {};
+  transactionsList.forEach(t => {
+    if (t.d31_90 > 0) {
+      if (!vendorD31_90[t.vendor]) vendorD31_90[t.vendor] = 0;
+      vendorD31_90[t.vendor] += t.d31_90;
+    }
+  });
+  const sortedWatch = Object.keys(vendorD31_90)
+    .map(name => ({ name, val: vendorD31_90[name] }))
+    .sort((a,b) => b.val - a.val);
+    
+  if (sortedWatch.length >= 2) {
+    const top1 = sortedWatch[0];
+    const top2 = sortedWatch[1];
+    const sumWatch = top1.val + top2.val;
+    alerts.push({
+      alert_type: 'Watch List',
+      title: '⚠ Watch List',
+      message: `${top1.name.split(' ')[0]} + ${top2.name.split(' ')[0]} = ${formatLakhs(sumWatch)} in 31–90 D`,
+      severity: 'warning'
+    });
+  } else if (sortedWatch.length === 1) {
+    alerts.push({
+      alert_type: 'Watch List',
+      title: '⚠ Watch List',
+      message: `${sortedWatch[0].name.split(' ')[0]} = ${formatLakhs(sortedWatch[0].val)} in 31–90 D`,
+      severity: 'warning'
+    });
+  }
+  
+  // 3. Control Offset Alert: credit balance overpayments
+  const overpaidTotal = transactionsList.reduce((acc, t) => t.total < 0 ? acc + Math.abs(t.total) : acc, 0);
+  if (overpaidTotal > 0) {
+    alerts.push({
+      alert_type: 'Control Offset',
+      title: '⊙ Control Offset',
+      message: `Control A/c shows ${formatLakhs(overpaidTotal)} debit balance – Reconcile Urgently`,
+      severity: 'info'
+    });
+  } else {
+    alerts.push({
+      alert_type: 'Control Offset',
+      title: '⊙ Control Offset',
+      message: 'Control Account and subsidiary ledger fully reconciled.',
+      severity: 'info'
+    });
+  }
+  
+  return alerts;
+}
+
+// ===== DATA LOADING & NORMALIZATION =====
+
+// Load CSV directly from path using Papa.parse
+async function loadCSV(filePath) {
+  return new Promise((resolve, reject) => {
+    Papa.parse(filePath, {
+      download: true,
+      header: true,
+      dynamicTyping: true,
+      skipEmptyLines: 'greedy',
+      complete: (results) => {
+        if (results.errors && results.errors.length > 0 && results.data.length === 0) {
+          reject(new Error(results.errors[0].message));
+        } else {
+          resolve(results.data);
+        }
+      },
+      error: (err) => {
+        reject(err);
+      }
+    });
+  });
+}
+
+// Normalize spreadsheet headers into standard lowercase identifiers
+function normalizeRow(row) {
+  const normalized = {};
+  for (let key in row) {
+    if (!row.hasOwnProperty(key)) continue;
+    const cleanKey = key.trim().toLowerCase()
+      .replace(/^sum of\s+/i, '')
+      .replace(/[\s–_-]+/g, '');
+    normalized[cleanKey] = row[key];
+  }
+  return normalized;
+}
+
+// Convert rupees values to Indian Lakhs dynamically if input is in base INR currency
+function toLakhs(val) {
+  if (val === null || val === undefined || isNaN(val)) return 0;
+  if (Math.abs(val) > 500) {
+    return val / 100000;
+  }
+  return val;
+}
+
+// Map raw row fields to unified ledger model
+function mapTransaction(rawRow) {
+  const n = normalizeRow(rawRow);
+  
+  const code = n.accountcode || n.code || n.analysiscode || '';
+  if (!code || code === 'Grand Total') return null; // skip summary lines
+  
+  const vendor = n.vendor || n.description || n.name || 'Unknown';
+  if (vendor.toLowerCase().includes('grand total') || vendor.toLowerCase().includes('total')) return null;
+  
+  const category = n.category || 'Vendor';
+  const bu = n.businessunit || n.bu || 'IUG';
+  
+  const getVal = (possibleKeys) => {
+    for (let k of possibleKeys) {
+      if (n[k] !== undefined && n[k] !== null) {
+        let val = n[k];
+        if (typeof val === 'string') {
+          val = parseFloat(val.replace(/,/g, '').trim());
+        }
+        if (!isNaN(val)) return val;
+      }
+    }
+    return 0;
+  };
+  
+  const total = getVal(['totaloutstanding', 'total', 'sumofbaseamount', 'baseamount', 'sumofoutstanding']);
+  const d0_30 = getVal(['030d', 'sumof0to30days', '030days', 'd030', '030', 'sumof0to30d', 'sumof0to30daysa']);
+  const d31_90 = getVal(['3190d', 'sumof31to90days', '3190days', 'd3190', '3190', 'sumof31to90d', 'sumof31to90daysa']);
+  const d91_180 = getVal(['91180d', 'sumof91to180days', '91180days', 'd91180', '91180', 'sumof91to180d', 'sumof91to180daysa']);
+  const d181_365 = getVal(['181365d', 'sumof181to365days', '181365days', 'd181365', '181365', 'sumof181to365d', 'sumof181to365daysa']);
+  const d365p = getVal(['365d', 'sumofover365days', 'over365days', 'd365p', '365p', '365', 'sumofover365d', 'sumofover365daysa', 'sumofover365days1']);
+  
+  const dpd = getVal(['dpd', 'dayspastdue', 'dayspastdueavg', 'dpdavg', 'days']);
+  
+  const lakhsTotal = toLakhs(total);
+  const lakhsD0_30 = toLakhs(d0_30);
+  const lakhsD31_90 = toLakhs(d31_90);
+  const lakhsD91_180 = toLakhs(d91_180);
+  const lakhsD181_365 = toLakhs(d181_365);
+  const lakhsD365p = toLakhs(d365p);
+  
+  const overdue = lakhsD31_90 + lakhsD91_180 + lakhsD181_365 + lakhsD365p;
+  
+  let risk = n.risk || n.riskflag || '';
+  if (!risk) {
+    if (lakhsD365p > 0) risk = 'Critical';
+    else if (lakhsD181_365 > 0) risk = 'Watch';
+    else if (lakhsD91_180 > 0) risk = 'Monitor';
+    else risk = 'Current';
+  }
+  
+  return {
+    code,
+    vendor,
+    category,
+    bu,
+    total: lakhsTotal,
+    d0_30: lakhsD0_30 || null,
+    d31_90: lakhsD31_90 || null,
+    d91_180: lakhsD91_180 || null,
+    d181_365: lakhsD181_365 || null,
+    d365p: lakhsD365p || null,
+    overdue: overdue || null,
+    dpd: Math.round(dpd),
+    risk
+  };
+}
+
+// ===== NUMBER FORMATTING HELPERS =====
+
+function formatLakhs(value) {
+  if (value === null || value === undefined || isNaN(value)) return '₹0.0L';
+  const sign = value < 0 ? '-' : '';
+  const absVal = Math.abs(value);
+  return `₹${sign}${absVal.toFixed(1)}L`;
+}
+
+function formatTableLakhs(value) {
+  if (value === null || value === undefined) return '<span class="dash">—</span>';
+  const sign = value < 0 ? '-' : '';
+  const absVal = Math.abs(value);
+  return `₹${sign}${absVal.toFixed(2)}L`;
+}
+
+function formatTableHighlight(value, className) {
+  if (value === null || value === undefined || value === 0) return '<span class="dash">—</span>';
+  return `<span class="${className}">${formatTableLakhs(value)}</span>`;
+}
+
+// ===== DYNAMIC DROPDOWN POPULATION =====
+function populateFilterOptions() {
+  const buFilter = document.getElementById('buFilter');
+  const catFilter = document.getElementById('catFilter');
+  const acctFilter = document.getElementById('acctFilter');
+  
+  const selectedBu = buFilter.value;
+  const selectedCat = catFilter.value;
+  const selectedAcct = acctFilter.value;
+  
+  const buList = new Set();
+  const catList = new Set();
+  const acctList = new Set();
+  
+  dashboardData.transactions.forEach(t => {
+    if (t.bu) buList.add(t.bu);
+    if (t.category) catList.add(t.category);
+    if (t.code) acctList.add(t.code);
+  });
+  
+  buFilter.innerHTML = '<option value="All">All</option>' + 
+    Array.from(buList).sort().map(val => `<option value="${val}">${val}</option>`).join('');
+  buFilter.value = buList.has(selectedBu) ? selectedBu : 'All';
+  
+  catFilter.innerHTML = '<option value="All">All</option>' + 
+    Array.from(catList).sort().map(val => `<option value="${val}">${val}</option>`).join('');
+  catFilter.value = catList.has(selectedCat) ? selectedCat : 'All';
+  
+  acctFilter.innerHTML = '<option value="All">All</option>' + 
+    Array.from(acctList).sort().map(val => `<option value="${val}">${val}</option>`).join('');
+  acctFilter.value = acctList.has(selectedAcct) ? selectedAcct : 'All';
+}
+
+// ===== MASTER FILTER COORDINATOR =====
+function applyFilters() {
+  const buVal = document.getElementById('buFilter').value;
+  const catVal = document.getElementById('catFilter').value;
+  const acctVal = document.getElementById('acctFilter').value;
+  const bucketVal = document.getElementById('bucketFilter').value;
+  
+  filteredTransactions = dashboardData.transactions.filter(t => {
+    if (buVal !== 'All' && t.bu !== buVal) return false;
+    if (catVal !== 'All' && t.category !== catVal) return false;
+    if (acctVal !== 'All' && t.code !== acctVal) return false;
+    
+    if (bucketVal !== 'All') {
+      if (bucketVal === '0–30 D' && !(t.d0_30 > 0)) return false;
+      if (bucketVal === '31–90 D' && !(t.d31_90 > 0)) return false;
+      if (bucketVal === '91–180 D' && !(t.d91_180 > 0)) return false;
+      if (bucketVal === '181–365 D' && !(t.d181_365 > 0)) return false;
+      if (bucketVal === '>365 D' && !(t.d365p > 0)) return false;
+    }
+    return true;
+  });
+  
+  // Re-run dynamic rendering
+  updateKPIs();
+  updateStackedBar();
+  updateCharts();
+  updateVendorAnalysis();
+  updateAlerts();
+  
+  // Reset table sorting and apply filters/search
+  currentSortCol = -1;
+  filterTable();
+}
+
+// ===== UPDATE KPIs =====
+function updateKPIs() {
+  const totalOutstanding = filteredTransactions.reduce((acc, t) => acc + t.total, 0);
+  const overdue90 = filteredTransactions.reduce((acc, t) => acc + (t.d91_180 || 0) + (t.d181_365 || 0) + (t.d365p || 0), 0);
+  const vendorPayables = filteredTransactions.reduce((acc, t) => t.category === 'Vendor' ? acc + t.total : acc, 0);
+  const current = filteredTransactions.reduce((acc, t) => acc + (t.d0_30 || 0), 0);
+  const d31_90 = filteredTransactions.reduce((acc, t) => acc + (t.d31_90 || 0), 0);
+  
+  // Weighted Avg DPD (avoid negative credit balances/division by zero)
+  let weightSum = 0;
+  let totalPositive = 0;
+  filteredTransactions.forEach(t => {
+    if (t.total > 0 && t.dpd !== null && t.dpd !== undefined) {
+      weightSum += t.dpd * t.total;
+      totalPositive += t.total;
+    }
+  });
+  const avgAgeing = totalPositive > 0 ? Math.round(weightSum / totalPositive) : 0;
+  
+  const chronic = filteredTransactions.reduce((acc, t) => acc + (t.d181_365 || 0) + (t.d365p || 0), 0);
+  
+  // Write to cards
+  document.getElementById('kpiTotalOutstanding').textContent = formatLakhs(totalOutstanding);
+  
+  const overduePct = totalOutstanding !== 0 ? ((overdue90 / totalOutstanding) * 100).toFixed(1) : '0.0';
+  document.getElementById('kpiOverdue90').textContent = formatLakhs(overdue90);
+  document.getElementById('kpiOverdue90Sub').textContent = `${overduePct}% of Total`;
+  
+  const uniqueVendorsCount = new Set(filteredTransactions.map(t => t.vendor)).size;
+  const buFilterVal = document.getElementById('buFilter').value;
+  document.getElementById('kpiVendorPayables').textContent = formatLakhs(vendorPayables);
+  document.getElementById('kpiVendorPayablesSub').textContent = `${uniqueVendorsCount} Creditors · ${buFilterVal}`;
+  
+  document.getElementById('kpiCurrent').textContent = formatLakhs(current);
+  
+  const concentrationPct = totalOutstanding !== 0 ? ((d31_90 / totalOutstanding) * 100).toFixed(1) : '0.0';
+  document.getElementById('kpi31_90').textContent = formatLakhs(d31_90);
+  document.getElementById('kpi31_90Sub').textContent = `${concentrationPct}% Concentration`;
+  
+  document.getElementById('kpiAvgAgeing').textContent = avgAgeing;
+  
+  const chronicPct = totalOutstanding !== 0 ? ((chronic / totalOutstanding) * 100).toFixed(1) : '0.0';
+  document.getElementById('kpiChronic').textContent = formatLakhs(chronic);
+  document.getElementById('kpiChronicSub').textContent = `${chronicPct}% of Total`;
+}
+
+// ===== UPDATE STACKED AGEING PROFILE BAR =====
+function updateStackedBar() {
+  const sum0_30 = filteredTransactions.reduce((acc, t) => acc + (t.d0_30 || 0), 0);
+  const sum31_90 = filteredTransactions.reduce((acc, t) => acc + (t.d31_90 || 0), 0);
+  const sum91_180 = filteredTransactions.reduce((acc, t) => acc + (t.d91_180 || 0), 0);
+  const sum181_365 = filteredTransactions.reduce((acc, t) => acc + (t.d181_365 || 0), 0);
+  const sum365p = filteredTransactions.reduce((acc, t) => acc + (t.d365p || 0), 0);
+  
+  const total = sum0_30 + sum31_90 + sum91_180 + sum181_365 + sum365p;
+  
+  const getPct = (val) => total > 0 ? Math.round((val / total) * 100) : 0;
+  
+  const pct0_30 = getPct(sum0_30);
+  const pct31_90 = getPct(sum31_90);
+  const pct91_180 = getPct(sum91_180);
+  const pct181_365 = getPct(sum181_365);
+  const pct365p = getPct(sum365p);
+  
+  const container = document.getElementById('stackedBar');
+  
+  let html = '';
+  if (pct0_30 > 0) html += `<div class="bar-seg green" style="flex:${pct0_30}" title="0–30 D: ${formatLakhs(sum0_30)} (${pct0_30}%)">${formatLakhs(sum0_30)} (${pct0_30}%)</div>`;
+  if (pct31_90 > 0) html += `<div class="bar-seg amber" style="flex:${pct31_90}" title="31–90 D: ${formatLakhs(sum31_90)} (${pct31_90}%)">${formatLakhs(sum31_90)} (${pct31_90}%)</div>`;
+  if (pct91_180 > 0) html += `<div class="bar-seg orange" style="flex:${pct91_180}" title="91–180 D: ${formatLakhs(sum91_180)} (${pct91_180}%)">${pct91_180}%</div>`;
+  if (pct181_365 > 0) html += `<div class="bar-seg red" style="flex:${pct181_365}" title="181–365 D: ${formatLakhs(sum181_365)} (${pct181_365}%)">${formatLakhs(sum181_365)} (${pct181_365}%)</div>`;
+  if (pct365p > 0) html += `<div class="bar-seg purple" style="flex:${pct365p}" title=">365 D: ${formatLakhs(sum365p)} (${pct365p}%)">${pct365p}%</div>`;
+  
+  if (!html) {
+    html = '<div class="bar-seg green" style="flex:100" title="No outstanding balance">No Outstanding Balance</div>';
+  }
+  container.innerHTML = html;
+}
+
+// ===== UPDATE CHARTS (REUSE & DESTROY PREVIOUS INSTANCES) =====
+function updateCharts() {
+  const sum0_30 = filteredTransactions.reduce((acc, t) => acc + (t.d0_30 || 0), 0);
+  const sum31_90 = filteredTransactions.reduce((acc, t) => acc + (t.d31_90 || 0), 0);
+  const sum91_180 = filteredTransactions.reduce((acc, t) => acc + (t.d91_180 || 0), 0);
+  const sum181_365 = filteredTransactions.reduce((acc, t) => acc + (t.d181_365 || 0), 0);
+  const sum365p = filteredTransactions.reduce((acc, t) => acc + (t.d365p || 0), 0);
+  
+  const total = sum0_30 + sum31_90 + sum91_180 + sum181_365 + sum365p;
+  const totalLakhsFormatted = formatLakhs(total);
+  
+  const getPct = (val) => total > 0 ? Math.round((val / total) * 100) : 0;
+  
+  // 1. Destroy bar chart if active
+  if (barChartInstance) {
+    barChartInstance.destroy();
+  }
+  
+  const maxVal = Math.max(sum0_30, sum31_90, sum91_180, sum181_365, sum365p, 10);
+  const yMax = Math.ceil(maxVal * 1.15);
+  
+  barChartInstance = new Chart(document.getElementById('barChart'), {
+    type: 'bar',
+    data: {
+      labels: ['0–30 D','31–90 D','91–180 D','181–365 D','>365 D'],
+      datasets: [{
+        data: [sum0_30, sum31_90, sum91_180, sum181_365, sum365p].map(v => parseFloat(v.toFixed(2))),
+        backgroundColor: ['#22c55e','#f59e0b','#f97316','#ef4444','#8b5cf6'],
+        borderRadius: 4,
+        borderSkipped: false,
+      }]
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      plugins: {
+        legend: {display:false},
+        tooltip: {
+          callbacks: {
+            label: ctx => `₹${ctx.parsed.y.toFixed(2)}L`
+          }
+        },
+        datalabels: false
+      },
+      scales: {
+        x: {
+          grid: {display:false},
+          ticks: {font:{size:10}, color:'#6b7280'},
+        },
+        y: {
+          grid: {color:'#f1f5f9'},
+          ticks: {
+            font:{size:10}, color:'#6b7280',
+            callback: v => `₹${v}L`
+          },
+          max: yMax
+        }
+      }
+    }
+  });
+  
+  // 2. Destroy donut chart if active
+  if (donutChartInstance) {
+    donutChartInstance.destroy();
+  }
+  
+  donutChartInstance = new Chart(document.getElementById('donutChart'), {
+    type: 'doughnut',
+    data: {
+      labels: ['0–30 D','31–90 D','91–180 D','181–365 D','>365 D'],
+      datasets: [{
+        data: [getPct(sum0_30), getPct(sum31_90), getPct(sum91_180), getPct(sum181_365), getPct(sum365p)],
+        backgroundColor: ['#22c55e','#f59e0b','#f97316','#ef4444','#8b5cf6'],
+        borderWidth: 2,
+        borderColor: '#fff',
+        hoverOffset: 6
+      }]
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      cutout: '65%',
+      plugins: {
+        legend: {display:false},
+        tooltip: {
+          callbacks: {
+            label: ctx => `${ctx.label}: ${ctx.parsed}%`
+          }
+        }
+      }
+    },
+    plugins: [{
+      id: 'centerText',
+      beforeDraw(chart) {
+        const {ctx, chartArea:{left,top,right,bottom}} = chart;
+        const cx = (left+right)/2, cy = (top+bottom)/2;
+        ctx.save();
+        ctx.font = 'bold 15px Segoe UI';
+        ctx.fillStyle = '#0d1b3e';
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        ctx.fillText(totalLakhsFormatted, cx, cy-8);
+        ctx.font = '10px Segoe UI';
+        ctx.fillStyle = '#6b7280';
+        ctx.fillText('Total', cx, cy+10);
+        ctx.restore();
+      }
+    }]
+  });
+}
+
+// ===== UPDATE VENDOR ANALYSIS & CONCENTRATION PANEL =====
+function updateVendorAnalysis() {
+  const vendorMap = {};
+  filteredTransactions.forEach(t => {
+    if (t.total <= 0) return;
+    if (!vendorMap[t.vendor]) {
+      vendorMap[t.vendor] = {
+        name: t.vendor,
+        amount: 0,
+        buckets: { d0_30: 0, d31_90: 0, d91_180: 0, d181_365: 0, d365p: 0 }
+      };
+    }
+    vendorMap[t.vendor].amount += t.total;
+    vendorMap[t.vendor].buckets.d0_30 += t.d0_30 || 0;
+    vendorMap[t.vendor].buckets.d31_90 += t.d31_90 || 0;
+    vendorMap[t.vendor].buckets.d91_180 += t.d91_180 || 0;
+    vendorMap[t.vendor].buckets.d181_365 += t.d181_365 || 0;
+    vendorMap[t.vendor].buckets.d365p += t.d365p || 0;
+  });
+  
+  const sortedVendors = Object.values(vendorMap).sort((a,b) => b.amount - a.amount);
+  const maxVendorAmount = sortedVendors.length > 0 ? sortedVendors[0].amount : 1;
+  
+  const top8Vendors = sortedVendors.slice(0, 8).map(v => {
+    const b = v.buckets;
+    let maxBucketVal = b.d0_30;
+    let primaryBucket = '0–30 D';
+    
+    if (b.d31_90 > maxBucketVal) { primaryBucket = '31–90 D'; maxBucketVal = b.d31_90; }
+    if (b.d91_180 > maxBucketVal) { primaryBucket = '91–180 D'; maxBucketVal = b.d91_180; }
+    if (b.d181_365 > maxBucketVal) { primaryBucket = '181 D+'; maxBucketVal = b.d181_365; }
+    if (b.d365p > maxBucketVal) { primaryBucket = '>365 D'; maxBucketVal = b.d365p; }
+    
+    const bucketClass = primaryBucket === '0–30 D' ? 'blue' : 
+                        primaryBucket === '31–90 D' ? 'red' : 
+                        primaryBucket === '91–180 D' ? 'amber' : 'purple';
+                        
+    return {
+      name: v.name,
+      amount: v.amount,
+      pct: Math.round((v.amount / maxVendorAmount) * 100),
+      bucket: primaryBucket,
+      bucketClass: bucketClass
+    };
+  });
+  
+  const container = document.getElementById('vendorList');
+  if (top8Vendors.length === 0) {
+    container.innerHTML = '<div style="font-size:12px;color:var(--text-muted);text-align:center;padding:20px;">No outstanding creditors</div>';
+  } else {
+    container.innerHTML = top8Vendors.map(v => `
+      <div class="vendor-row-item">
+        <span class="vendor-name">${v.name}</span>
+        <div class="vendor-bar-wrap">
+          <div class="vendor-bar" style="width:${v.pct}%;background:${v.bucketClass==='red'?'#ef4444':v.bucketClass==='amber'?'#f59e0b':v.bucketClass==='purple'?'#8b5cf6':'#3b82f6'}"></div>
+        </div>
+        <span class="vendor-amount">₹${v.amount.toFixed(1)}L</span>
+        <span class="bucket-tag ${v.bucketClass}">${v.bucket}</span>
+      </div>
+    `).join('');
+  }
+  
+  const totalOutstanding = filteredTransactions.reduce((acc, t) => acc + t.total, 0);
+  const top5Sum = sortedVendors.slice(0, 5).reduce((acc, v) => acc + v.amount, 0);
+  const top5Pct = totalOutstanding > 0 ? Math.round((top5Sum / totalOutstanding) * 100) : 0;
+  
+  document.getElementById('concValue').textContent = formatLakhs(top5Sum);
+  document.getElementById('concPct').textContent = `${top5Pct}% of Total Outstanding`;
+  document.getElementById('concProgressFill').style.width = `${top5Pct}%`;
+  
+  const overpaidTotal = filteredTransactions.reduce((acc, t) => t.total < 0 ? acc + Math.abs(t.total) : acc, 0);
+  const largestOverpaid = filteredTransactions.filter(t => t.total < 0).sort((a,b) => a.total - b.total)[0];
+  
+  document.getElementById('overpaidValue').textContent = formatLakhs(overpaidTotal);
+  document.getElementById('overpaidSub').textContent = largestOverpaid ? `${largestOverpaid.vendor} (Adjust)` : 'No credit balances';
+  
+  const immediatePayments = Object.values(vendorMap)
+    .filter(v => v.buckets.d0_30 > 0)
+    .sort((a,b) => b.buckets.d0_30 - a.buckets.d0_30)
+    .slice(0, 3);
+    
+  if (immediatePayments.length === 0) {
+    document.getElementById('immediatePriorities').innerHTML = 'No immediate priorities — 0–30 D is clear';
+  } else {
+    const listItems = immediatePayments.map(v => `${v.name.split(' ')[0]} ₹${v.buckets.d0_30.toFixed(1)}L`).join(' · ');
+    document.getElementById('immediatePriorities').innerHTML = `${listItems} — all 0–30 D`;
+  }
+}
+
+// ===== UPDATE ALERTS SECTION =====
+function updateAlerts() {
+  const container = document.getElementById('alertsCol');
+  if (!dashboardData.alerts || dashboardData.alerts.length === 0) {
+    container.innerHTML = '<div style="font-size:12px;color:var(--text-muted);text-align:center;padding:20px;background:#fff;border-radius:10px;border:1px solid var(--border);flex:1;">No active alerts</div>';
+    return;
+  }
+  
+  // mapAlert: normalise alert objects (from CSV or dynamically generated)
+  function mapAlert(a) {
+    if (!a) return null;
+    return {
+      title: a.title || a.alert_type || 'Alert',
+      message: a.message || a.description || '',
+      severity: a.severity || 'info'
+    };
+  }
+  const mapped = dashboardData.alerts.map(mapAlert).filter(Boolean);
+  
+  container.innerHTML = mapped.map(a => {
+    const severityClass = a.severity === 'critical' ? 'alert-red' :
+                          a.severity === 'warning' ? 'alert-amber' : 'alert-blue-card';
+    const iconBg = a.severity === 'critical' ? '#fee2e2' :
+                   a.severity === 'warning' ? '#fef3c7' : '#dbeafe';
+    const strokeColor = a.severity === 'critical' ? '#ef4444' :
+                         a.severity === 'warning' ? '#d97706' : '#2563eb';
+    
+    let iconSvg = '';
+    if (a.severity === 'critical' || a.severity === 'warning') {
+      iconSvg = `<svg viewBox="0 0 24 24" fill="none" stroke="${strokeColor}" stroke-width="2"><path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>`;
+    } else {
+      iconSvg = `<svg viewBox="0 0 24 24" fill="none" stroke="${strokeColor}" stroke-width="2"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 3"/></svg>`;
+    }
+    
+    return `
+      <div class="alert-card ${severityClass}">
+        <div class="alert-icon" style="background:${iconBg}">
+          ${iconSvg}
+        </div>
+        <div>
+          <div class="alert-title" ${a.severity==='info' ? 'style="color:#1e40af"' : ''}>${a.title}</div>
+          <div class="alert-text">${a.message}</div>
+        </div>
+      </div>
+    `;
+  }).join('');
+}
+
+// ===== DRILLDOWN TABLE RENDERING =====
+function renderTable(data) {
+  const tbody = document.getElementById('tableBody');
+  const riskClass = {Critical:'risk-critical',Watch:'risk-watch',Monitor:'risk-monitor',Current:'risk-current'};
+  
+  tbody.innerHTML = data.map(r => `
+    <tr>
+      <td>${r.code}</td>
+      <td><strong>${r.vendor}</strong></td>
+      <td>${r.category}</td>
+      <td>${r.bu}</td>
+      <td><strong>${formatTableLakhs(r.total)}</strong></td>
+      <td>${formatTableHighlight(r.d0_30, 'highlight-blue')}</td>
+      <td>${formatTableHighlight(r.d31_90, 'highlight-amber')}</td>
+      <td>${formatTableHighlight(r.d91_180, 'highlight-amber')}</td>
+      <td>${formatTableHighlight(r.d181_365, 'highlight-red')}</td>
+      <td>${formatTableHighlight(r.d365p, 'highlight-red')}</td>
+      <td>${formatTableHighlight(r.overdue, '')}</td>
+      <td>${r.dpd >= 400 ? '420+' : r.dpd}</td>
+      <td><span class="risk-badge ${riskClass[r.risk] || 'risk-current'}">${r.risk}</span></td>
+    </tr>
+  `).join('');
+  
+  const grandTotal = data.reduce((acc, r) => acc + r.total, 0);
+  const grandD0_30 = data.reduce((acc, r) => acc + (r.d0_30 || 0), 0);
+  const grandD31_90 = data.reduce((acc, r) => acc + (r.d31_90 || 0), 0);
+  const grandD91_180 = data.reduce((acc, r) => acc + (r.d91_180 || 0), 0);
+  const grandD181_365 = data.reduce((acc, r) => acc + (r.d181_365 || 0), 0);
+  const grandD365p = data.reduce((acc, r) => acc + (r.d365p || 0), 0);
+  const grandOverdue = data.reduce((acc, r) => acc + (r.overdue || 0), 0);
+  
+  let weightSum = 0;
+  let totalPositive = 0;
+  data.forEach(r => {
+    if (r.total > 0 && r.dpd !== null && r.dpd !== undefined) {
+      weightSum += r.dpd * r.total;
+      totalPositive += r.total;
+    }
+  });
+  const grandAvgAgeing = totalPositive > 0 ? Math.round(weightSum / totalPositive) : 0;
+  
+  document.getElementById('totalOutstandingGrand').textContent = formatTableLakhs(grandTotal);
+  document.getElementById('d0_30Grand').textContent = formatTableLakhs(grandD0_30);
+  document.getElementById('d31_90Grand').textContent = formatTableLakhs(grandD31_90);
+  document.getElementById('d91_180Grand').textContent = formatTableLakhs(grandD91_180);
+  document.getElementById('d181_365Grand').textContent = formatTableLakhs(grandD181_365);
+  document.getElementById('d365pGrand').textContent = formatTableLakhs(grandD365p);
+  document.getElementById('totalOverdueGrand').textContent = formatTableLakhs(grandOverdue);
+  document.getElementById('avgAgeingGrand').textContent = grandAvgAgeing;
+}
+
+function filterTable() {
+  const q = document.getElementById('tableSearch').value.toLowerCase();
+  const filtered = filteredTransactions.filter(r => 
+    r.vendor.toLowerCase().includes(q) || r.code.toLowerCase().includes(q)
+  );
+  renderTable(filtered);
+}
+
+function sortTable(col) {
+  if (currentSortCol === col) {
+    currentSortAsc = !currentSortAsc;
+  } else {
+    currentSortCol = col;
+    currentSortAsc = true;
+  }
+  
+  const keys = ['code','vendor','category','bu','total','d0_30','d31_90','d91_180','d181_365','d365p','overdue','dpd','risk'];
+  const key = keys[col];
+  
+  const q = document.getElementById('tableSearch').value.toLowerCase();
+  const visibleRows = filteredTransactions.filter(r => 
+    r.vendor.toLowerCase().includes(q) || r.code.toLowerCase().includes(q)
+  );
+  
+  visibleRows.sort((a,b) => {
+    const av = a[key] ?? -Infinity;
+    const bv = b[key] ?? -Infinity;
+    if (typeof av === 'string') {
+      return currentSortAsc ? av.localeCompare(bv) : bv.localeCompare(av);
+    }
+    return currentSortAsc ? av - bv : bv - av;
+  });
+  
+  renderTable(visibleRows);
+}
+
+function exportCSV() {
+  const headers = ['Account Code','Vendor','Category','Business Unit','Total Outstanding','0-30D','31-90D','91-180D','181-365D','>365D','Total Overdue','Days Past Due','Risk Flag'];
+  const rows = filteredTransactions.map(r => [
+    r.code,
+    r.vendor,
+    r.category,
+    r.bu,
+    r.total ?? '',
+    r.d0_30 ?? '',
+    r.d31_90 ?? '',
+    r.d91_180 ?? '',
+    r.d181_365 ?? '',
+    r.d365p ?? '',
+    r.overdue ?? '',
+    r.dpd,
+    r.risk
+  ]);
+  const csvContent = [headers,...rows].map(r => r.join(',')).join('\n');
+  const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = 'creditors-ageing.csv';
+  a.click();
+  URL.revokeObjectURL(url);
+}
+
+// ===== CSV PREPROCESSOR =====
+// The user's CSV exports have metadata rows before the actual header.
+// This function strips those rows and returns clean CSV text starting at the real header.
+function preprocessCSV(rawText) {
+  const lines = rawText.split(/\r?\n/);
+  // Known header keywords that indicate the real header row
+  const headerKeywords = ['account code', 'analysis code', 'description', 'sum of base amount', 'sum of over 365'];
+  
+  let headerIdx = -1;
+  for (let i = 0; i < Math.min(lines.length, 10); i++) {
+    const lower = lines[i].toLowerCase();
+    // Check if this line contains at least 2 known header keywords
+    let matchCount = 0;
+    for (const kw of headerKeywords) {
+      if (lower.includes(kw)) matchCount++;
+    }
+    if (matchCount >= 2) {
+      headerIdx = i;
+      break;
+    }
+  }
+  
+  if (headerIdx === -1) {
+    // Fallback: just return the original text
+    return rawText;
+  }
+  
+  // Return everything from the header row onward, stripping trailing empty rows
+  const dataLines = lines.slice(headerIdx).filter(line => {
+    // Remove lines that are entirely commas/whitespace (empty padding)
+    return line.replace(/,/g, '').trim().length > 0;
+  });
+  
+  return dataLines.join('\n');
+}
+
+// ===== MAIN INITIALIZATION ENGINE =====
+async function initializeDashboard(forceReload = false) {
+  if (!forceReload && loadDashboardState()) {
+    populateFilterOptions();
+    applyFilters();
+    
+    const now = new Date();
+    const formattedDate = now.toLocaleDateString('en-US', { day: 'numeric', month: 'short', year: 'numeric' }) + ' ' + 
+                          now.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: true });
+    document.getElementById('refreshTime').textContent = formattedDate;
+    return;
+  }
+  
+  // CSV file mapping: filename → category and sign treatment
+  // Vendor/Emp/Faculty values are exported as negative (credit balance); invert for display.
+  // Control values are positive (debit balance); keep as-is.
+  const csvFiles = [
+    { path: 'csv/vendor.csv',  category: 'Vendor',   invertSign: true  },
+    { path: 'csv/Control.csv', category: 'Control',  invertSign: false },
+    { path: 'csv/Emp.csv',     category: 'Employee', invertSign: true  },
+    { path: 'csv/faculty.csv', category: 'Faculty',  invertSign: true  }
+  ];
+  
+  let combinedTransactions = [];
+  let loadedCount = 0;
+  let errors = [];
+  
+  for (const csvFile of csvFiles) {
+    try {
+      // Fetch the raw CSV text
+      const response = await fetch(csvFile.path);
+      if (!response.ok) {
+        console.warn(`Could not load ${csvFile.path}: ${response.status}`);
+        errors.push(csvFile.path);
+        continue;
+      }
+      const rawText = await response.text();
+      
+      // Preprocess to strip metadata rows and find real headers
+      const cleanText = preprocessCSV(rawText);
+      
+      // Parse with PapaParse
+      const parsed = Papa.parse(cleanText, {
+        header: true,
+        dynamicTyping: false, // keep as strings — we handle Indian number format manually
+        skipEmptyLines: 'greedy'
+      });
+      
+      if (!parsed.data || parsed.data.length === 0) {
+        console.warn(`No data rows found in ${csvFile.path}`);
+        continue;
+      }
+      
+      // Map each row
+      const mapped = parsed.data.map(rawRow => {
+        const n = normalizeRow(rawRow);
+        
+        // Determine the account code (faculty.csv doesn't have one)
+        let code = n.accountcode || n.code || n.analysiscode || '';
+        const vendor = n.vendor || n.description || n.name || 'Unknown';
+        
+        // Skip summary/total rows and empty rows
+        if (!vendor || vendor.toLowerCase().includes('grand total') || vendor.toLowerCase().includes('total')) return null;
+        if (!code && !vendor) return null;
+        
+        // Faculty CSV has no Account Code — generate one from the description
+        if (!code && csvFile.category === 'Faculty') {
+          code = 'F-' + vendor.substring(0, 8).toUpperCase().replace(/\s/g, '');
+        }
+        if (!code) return null;
+        
+        const bu = n.businessunit || n.bu || 'IUG';
+        
+        // Parse Indian-formatted numbers: remove commas, handle quoted negatives
+        const parseIndian = (possibleKeys) => {
+          for (let k of possibleKeys) {
+            if (n[k] !== undefined && n[k] !== null && String(n[k]).trim() !== '') {
+              let val = String(n[k]).replace(/,/g, '').replace(/"/g, '').trim();
+              let parsed = parseFloat(val);
+              if (!isNaN(parsed)) return parsed;
+            }
+          }
+          return 0;
+        };
+        
+        let total = parseIndian(['baseamount', 'sumofbaseamount', 'totaloutstanding', 'total', 'sumofoutstanding']);
+        let d0_30 = parseIndian(['0to30days', 'sumof0to30days', '030d', '030days', 'd030', '030', 'sumof0to30d', 'sumof0to30daysa']);
+        let d31_90 = parseIndian(['31to90days', 'sumof31to90days', '3190d', '3190days', 'd3190', '3190', 'sumof31to90d', 'sumof31to90daysa']);
+        let d91_180 = parseIndian(['91to180days', 'sumof91to180days', '91180d', '91180days', 'd91180', '91180', 'sumof91to180d', 'sumof91to180daysa']);
+        let d181_365 = parseIndian(['181to365days', 'sumof181to365days', '181365d', '181365days', 'd181365', '181365', 'sumof181to365d', 'sumof181to365daysa']);
+        let d365p = parseIndian(['over365days', 'sumofover365days', '365d', 'd365p', '365p', '365', 'sumofover365d', 'sumofover365daysa', 'sumofover365days1']);
+        
+        // Sign inversion for credit-balance exports (vendor/emp/faculty)
+        // These CSVs export payables as negative; we want positive for display
+        // Exception: if total is positive it means advance/overpayment — keep as negative
+        if (csvFile.invertSign) {
+          // If total is negative (= genuine payable), invert all to positive
+          // If total is positive (= overpayment/advance), make it negative
+          total = -total;
+          d0_30 = -d0_30;
+          d31_90 = -d31_90;
+          d91_180 = -d91_180;
+          d181_365 = -d181_365;
+          d365p = -d365p;
+        }
+        
+        // Convert base INR to Lakhs
+        const lakhsTotal = toLakhs(total);
+        const lakhsD0_30 = toLakhs(d0_30);
+        const lakhsD31_90 = toLakhs(d31_90);
+        const lakhsD91_180 = toLakhs(d91_180);
+        const lakhsD181_365 = toLakhs(d181_365);
+        const lakhsD365p = toLakhs(d365p);
+        
+        const overdue = lakhsD31_90 + lakhsD91_180 + lakhsD181_365 + lakhsD365p;
+        
+        // Estimate Days Past Due from bucket weights if not provided
+        let dpd = 0;
+        const absTotal = Math.abs(lakhsTotal);
+        if (absTotal > 0) {
+          dpd = Math.round(
+            (Math.abs(lakhsD0_30) * 15 +
+             Math.abs(lakhsD31_90) * 60 +
+             Math.abs(lakhsD91_180) * 135 +
+             Math.abs(lakhsD181_365) * 270 +
+             Math.abs(lakhsD365p) * 420) / absTotal
+          );
+        }
+        
+        // Risk flag
+        let risk = '';
+        if (lakhsD365p > 0) risk = 'Critical';
+        else if (lakhsD181_365 > 0) risk = 'Watch';
+        else if (lakhsD91_180 > 0) risk = 'Monitor';
+        else risk = 'Current';
+        
+        return {
+          code,
+          vendor,
+          category: csvFile.category,
+          bu,
+          total: lakhsTotal,
+          d0_30: lakhsD0_30 || null,
+          d31_90: lakhsD31_90 || null,
+          d91_180: lakhsD91_180 || null,
+          d181_365: lakhsD181_365 || null,
+          d365p: lakhsD365p || null,
+          overdue: overdue || null,
+          dpd,
+          risk
+        };
+      }).filter(Boolean);
+      
+      combinedTransactions = combinedTransactions.concat(mapped);
+      loadedCount++;
+      console.log(`Loaded ${mapped.length} rows from ${csvFile.path} (${csvFile.category})`);
+      
+    } catch (err) {
+      console.warn(`Error loading ${csvFile.path}:`, err);
+      errors.push(csvFile.path);
+    }
+  }
+  
+  if (combinedTransactions.length === 0) {
+    console.error('No data loaded from any CSV file. Errors:', errors);
+    alert('Dashboard CSV initialization failed. Please ensure CSV files are in the csv/ folder, or use the Data Import tab to upload files.');
+    return;
+  }
+  
+  // Generate dynamic alerts
+  const dynamicAlerts = generateDynamicAlerts(combinedTransactions);
+  
+  // Update global state
+  dashboardData = {
+    transactions: combinedTransactions,
+    ageing: [],
+    vendors: [],
+    kpis: [],
+    alerts: dynamicAlerts
+  };
+  
+  console.log(`Dashboard loaded successfully: ${combinedTransactions.length} transactions from ${loadedCount} files.`);
+  
+  // Populate filter dropdowns
+  populateFilterOptions();
+  
+  // Apply filters and render everything
+  applyFilters();
+  
+  // Update refresh timestamp
+  const now = new Date();
+  const formattedDate = now.toLocaleDateString('en-US', { day: 'numeric', month: 'short', year: 'numeric' }) + ' ' + 
+                        now.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: true });
+  document.getElementById('refreshTime').textContent = formattedDate;
+  
+  // Cache the loaded state
+  saveDashboardState();
+}
+
+// Launch uploader slots dragover events
+document.addEventListener('DOMContentLoaded', () => {
+  for (let i = 1; i <= 8; i++) {
+    const card = document.getElementById(`slotCard-${i}`);
+    if (card) {
+      card.addEventListener('dragover', (e) => {
+        e.preventDefault();
+        card.classList.add('dragover');
+      });
+      card.addEventListener('dragleave', () => {
+        card.classList.remove('dragover');
+      });
+      card.addEventListener('drop', (e) => {
+        e.preventDefault();
+        card.classList.remove('dragover');
+        const file = e.dataTransfer.files[0];
+        if (file) {
+          readAndStoreFile(i, file);
+        }
+      });
+    }
+  }
+});
+
+// Boot loader
+initializeDashboard();
+</script>
+</body>
+</html>
